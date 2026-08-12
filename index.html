@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Countdown Timer</title>
+<style>
+  :root {
+    --green: #2e7d32;
+    --yellow: #f9a825;
+    --red: #c62828;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    touch-action: manipulation;
+  }
+
+  body {
+    background: var(--green);
+    color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 16px;
+    transition: background-color 0.4s ease, color 0.4s ease;
+    user-select: none;
+  }
+
+  #setTimeLabel {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    opacity: 0.7;
+    margin-bottom: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  #display {
+    font-size: 22vw;
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: 2px;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+
+  .row {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+
+  .setter-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .setter-label {
+    font-size: 14px;
+    font-weight: 600;
+    opacity: 0.85;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .setter-buttons {
+    display: flex;
+    gap: 6px;
+  }
+
+  button {
+    font-family: inherit;
+    border: none;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.22);
+    color: inherit;
+    padding: 12px 14px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    min-width: 48px;
+  }
+
+  button:active {
+    background: rgba(255, 255, 255, 0.4);
+  }
+
+  button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  #controls {
+    margin-top: 10px;
+    display: flex;
+    gap: 12px;
+  }
+
+  #controls button {
+    padding: 14px 26px;
+    font-size: 18px;
+    border-radius: 12px;
+    min-width: 100px;
+  }
+
+  #startBtn { background: rgba(255,255,255,0.9); color: #1b5e20; }
+  #pauseBtn { background: rgba(255,255,255,0.22); }
+  #resetBtn { background: rgba(255,255,255,0.22); }
+
+  #status {
+    margin-top: 18px;
+    font-size: 14px;
+    opacity: 0.85;
+    min-height: 18px;
+  }
+
+  @media (min-width: 600px) {
+    #display { font-size: 140px; }
+  }
+</style>
+</head>
+<body>
+
+  <div id="setTimeLabel">Set: 00:00</div>
+  <div id="display">00:00</div>
+
+  <div class="row">
+    <div class="setter-group">
+      <div class="setter-label">Minutes</div>
+      <div class="setter-buttons">
+        <button id="minMinus10">-10</button>
+        <button id="minMinus1">-1</button>
+        <button id="minPlus1">+1</button>
+        <button id="minPlus10">+10</button>
+      </div>
+    </div>
+
+    <div class="setter-group">
+      <div class="setter-label">Seconds</div>
+      <div class="setter-buttons">
+        <button id="secMinus10">-10</button>
+        <button id="secMinus1">-1</button>
+        <button id="secPlus1">+1</button>
+        <button id="secPlus10">+10</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="controls">
+    <button id="startBtn">Start</button>
+    <button id="pauseBtn">Pause</button>
+    <button id="resetBtn">Reset</button>
+  </div>
+
+  <div id="status"></div>
+
+<script>
+  const MAX_MINUTES = 99;
+
+  const display = document.getElementById('display');
+  const setTimeLabel = document.getElementById('setTimeLabel');
+  const statusEl = document.getElementById('status');
+  const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const resetBtn = document.getElementById('resetBtn');
+
+  const setterButtons = [
+    document.getElementById('minMinus10'),
+    document.getElementById('minMinus1'),
+    document.getElementById('minPlus1'),
+    document.getElementById('minPlus10'),
+    document.getElementById('secMinus10'),
+    document.getElementById('secMinus1'),
+    document.getElementById('secPlus1'),
+    document.getElementById('secPlus10'),
+  ];
+
+  let initialSeconds = 0;   // the "set" time, restored on reset
+  let totalSeconds = 0;     // current countdown value (can go negative)
+  let running = false;
+  let intervalId = null;
+
+  // ---- Audio beep (Web Audio API, no external files needed) ----
+  let audioCtx = null;
+  function ensureAudioCtx() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+  }
+
+  function beep() {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.4, audioCtx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.3);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.32);
+  }
+
+  // ---- Display formatting ----
+  function formatTime(secs) {
+    const neg = secs < 0;
+    const abs = Math.abs(secs);
+    const m = Math.floor(abs / 60);
+    const s = abs % 60;
+    const mm = String(m).padStart(2, '0');
+    const ss = String(s).padStart(2, '0');
+    return (neg ? '-' : '') + mm + ':' + ss;
+  }
+
+  function updateDisplay() {
+    display.textContent = formatTime(totalSeconds);
+    updateColors();
+  }
+
+  function updateSetTimeLabel() {
+    setTimeLabel.textContent = 'Set: ' + formatTime(initialSeconds);
+  }
+
+  function updateColors() {
+    if (totalSeconds <= 0) {
+      document.body.style.backgroundColor = 'var(--red)';
+      document.body.style.color = '#ffffff';
+    } else if (totalSeconds <= 30) {
+      document.body.style.backgroundColor = 'var(--yellow)';
+      document.body.style.color = '#ffffff';
+    } else {
+      document.body.style.backgroundColor = 'var(--green)';
+      document.body.style.color = '#ffffff';
+    }
+  }
+
+  // ---- Setting time before starting ----
+  function clampInitial() {
+    const maxTotal = MAX_MINUTES * 60 + 59;
+    if (initialSeconds < 0) initialSeconds = 0;
+    if (initialSeconds > maxTotal) initialSeconds = maxTotal;
+  }
+
+  function adjustTime(deltaSeconds) {
+    if (running) return;
+    initialSeconds += deltaSeconds;
+    clampInitial();
+    totalSeconds = initialSeconds;
+    updateDisplay();
+    updateSetTimeLabel();
+  }
+
+  document.getElementById('minMinus10').addEventListener('click', () => adjustTime(-10 * 60));
+  document.getElementById('minMinus1').addEventListener('click', () => adjustTime(-1 * 60));
+  document.getElementById('minPlus1').addEventListener('click', () => adjustTime(1 * 60));
+  document.getElementById('minPlus10').addEventListener('click', () => adjustTime(10 * 60));
+  document.getElementById('secMinus10').addEventListener('click', () => adjustTime(-10));
+  document.getElementById('secMinus1').addEventListener('click', () => adjustTime(-1));
+  document.getElementById('secPlus1').addEventListener('click', () => adjustTime(1));
+  document.getElementById('secPlus10').addEventListener('click', () => adjustTime(10));
+
+  // ---- Beep trigger logic ----
+  function checkBeep() {
+    if (totalSeconds === 30) {
+      beep();
+    } else if (totalSeconds <= 0 && totalSeconds % 30 === 0) {
+      beep();
+    }
+  }
+
+  // ---- Controls ----
+  function setSetterButtonsEnabled(enabled) {
+    setterButtons.forEach(b => b.disabled = !enabled);
+  }
+
+  function tick() {
+    totalSeconds -= 1;
+    updateDisplay();
+    checkBeep();
+    if (totalSeconds <= 0) {
+      statusEl.textContent = 'Counting past zero — press Reset to stop';
+    }
+  }
+
+  function start() {
+    if (running) return;
+    ensureAudioCtx();
+    running = true;
+    setSetterButtonsEnabled(false);
+    statusEl.textContent = totalSeconds <= 0 ? 'Counting past zero — press Reset to stop' : '';
+    intervalId = setInterval(tick, 1000);
+  }
+
+  function pause() {
+    if (!running) return;
+    running = false;
+    clearInterval(intervalId);
+    intervalId = null;
+  }
+
+  function reset() {
+    pause();
+    totalSeconds = initialSeconds;
+    setSetterButtonsEnabled(true);
+    statusEl.textContent = '';
+    updateDisplay();
+  }
+
+  startBtn.addEventListener('click', start);
+  pauseBtn.addEventListener('click', pause);
+  resetBtn.addEventListener('click', reset);
+
+  updateDisplay();
+  updateSetTimeLabel();
+</script>
+
+</body>
+</html>
