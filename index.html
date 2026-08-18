@@ -283,7 +283,7 @@
       beep();
     } else if (totalSeconds <= 0 && totalSeconds % 30 === 0) {
       beep();
-      beep();
+      setTimeout(beep, 400); // fires ~400ms after the first beep finishes
     }
   }
 
