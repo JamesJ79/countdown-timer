@@ -211,7 +211,7 @@
     osc.type = 'sine';
     osc.frequency.value = 1660;
     gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.85, audioCtx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.8, audioCtx.currentTime + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.3);
     osc.connect(gain);
     gain.connect(audioCtx.destination);
